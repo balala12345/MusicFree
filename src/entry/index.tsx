@@ -21,6 +21,7 @@ import { routes } from "@/core/router/routes.tsx";
 import ErrorBoundary from "@/components/errorBoundary";
 import { NotificationLifecycleManager } from "@/core/notificationLifecycleManager";
 import { appendStartupBreadcrumb } from "@/utils/log";
+import { QSignHost } from "@/core/qsign";
 
 StatusBar.setBackgroundColor("transparent");
 StatusBar.setTranslucent(true);
@@ -78,6 +79,7 @@ export default function Pages() {
               Android free FAB is a native decorView child (same HWUI surface).
             */}
             <View style={styles.root}>
+                <QSignHost />
                 <SafeAreaProvider style={globalStyle.flex1}>
                     <NavigationContainer theme={navigationTheme as any}>
                         <ErrorBoundary>

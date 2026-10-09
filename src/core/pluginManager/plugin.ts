@@ -27,6 +27,7 @@ import he from "he";
 import { produce } from "immer";
 import { nanoid } from "@/utils/nanoid";
 import objectPath from "object-path";
+import { qsignSign } from "@/core/qsign";
 import qs from "qs";
 import { Platform } from "react-native";
 import { default as DeviceInfo, default as deviceInfoModule } from "react-native-device-info";
@@ -1404,6 +1405,13 @@ export class Plugin {
             }
             try {
                 g.process = this.sandboxProcess;
+            } catch {
+                // ignore non-configurable
+            }
+            try {
+                // 本地签名（WebView + WASM）：插件里直接 await globalThis.__qsign(url, header)
+                g.__qsign = (url: string, header: Record<string, string> = {}) =>
+                    qsignSign(url, header);
             } catch {
                 // ignore non-configurable
             }
