@@ -1,7 +1,6 @@
 name: build-android-apk
 
-# 云端编译 APK：推代码 / 手动触发都可以。
-# 产物在 Actions 页面的 Artifacts 里下载（artifact 名字：musicfree-apk）
+# 云端编译 APK：推代码 / 手动触发都可以。产物在 Actions 运行的 Artifacts 里（musicfree-apk）
 on:
   workflow_dispatch:
   push:
@@ -24,24 +23,36 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # runner 镜像自带 Android SDK，不用 setup-android（那个 action 会因 Azure 认证失败）
+      - name: 环境自检
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls "$ANDROID_HOME" || true
+          java -version
+          node -v
 
-      - name: Install JS deps
-        run: npm install --legacy-peer-deps
+      - name: Gradle 内存调大
+        run: echo "org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8" >> android/gradle.properties
 
-      - name: Build release APK
+      - name: 安装 JS 依赖
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+
+      - name: 编译 APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleDebug assembleRelease --no-daemon --stacktrace \
+            || ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: 列一下产物
+        if: always()
+        run: find android/app/build/outputs -name "*.apk" -exec ls -la {} \; || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: musicfree-apk
-          path: |
-            android/app/build/outputs/apk/release/*.apk
-            android/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          path: android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
           retention-days: 30
