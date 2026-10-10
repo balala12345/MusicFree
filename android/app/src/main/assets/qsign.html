@@ -8364,6 +8364,20 @@ function handle(raw) {
 window.addEventListener('message', function (e) { handle(e.data); });
 document.addEventListener('message', function (e) { handle(e.data); });
 window.__qsignReady = !!(QSIGN && QSIGN.available);
+
+/* 原生 App（Android）通过 evaluateJavascript 调用这里，结果用 QS.reply(id, json) 回传 */
+window.__qsignCall = function (id, url, headerJson) {
+  function reply(payload) { try { if (window.QS && window.QS.reply) window.QS.reply(id, payload); } catch (e) {} }
+  try {
+    var header = JSON.parse(headerJson || "{}");
+    if (!QSIGN || !QSIGN.available) { reply(JSON.stringify({ error: "wasm unavailable" })); return; }
+    QSIGN.sign(url, header)
+      .then(function (d) { reply(JSON.stringify(d)); })
+      .catch(function (e) { reply(JSON.stringify({ error: String(e && e.message ? e.message : e) })); });
+  } catch (e) {
+    reply(JSON.stringify({ error: String(e && e.message ? e.message : e) }));
+  }
+};
 </script>
 </body>
 </html>
