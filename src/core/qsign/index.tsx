@@ -121,7 +121,7 @@ export function QSignHost() {
   }, []);
   if (!show) return null;   // 没请求签名就不渲染，零干扰
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', width: 0, height: 0, left: 0, top: 0, zIndex: -1 }}>
+    <View pointerEvents="none" style={{ position: 'absolute', width: 1, height: 1, left: 0, top: 0, zIndex: -1 }}>
     <WebView
       ref={ref}
       source={{ uri: 'file:///android_asset/qsign.html' }}
@@ -143,7 +143,8 @@ export function QSignHost() {
       onError={() => { webviewRef = null; }}
       pointerEvents="none"
       // 绝对定位 + 零尺寸 + zIndex -1：完全不参与布局，也不挡触摸
-      style={{ width: 0, height: 0, opacity: 0 }}
+      // 关键：尺寸不能是 0、opacity 不能是 0 —— 否则 Chromium 视作被遮挡，会对渲染进程节流/冻结
+      style={{ width: 1, height: 1, opacity: 0.01 }}
     />
     </View>
   );
