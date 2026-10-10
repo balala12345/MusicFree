@@ -1,4 +1,4 @@
-package fun.xwj.musicfree.qsign
+package `fun`.xwj.musicfree.qsign
 
 import android.content.BroadcastReceiver
 import android.content.Context
