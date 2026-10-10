@@ -47,7 +47,7 @@ class SignService : Service() {
             val ch = NotificationChannel("qsign", "本机签名服务", NotificationManager.IMPORTANCE_LOW)
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(ch)
         }
-        val pi = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
+        val pi = PendingIntent.getActivity(this, 0, Intent(this, `fun`.xwj.musicfree.MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "qsign") else Notification.Builder(this)
         return b.setContentTitle("本机签名服务运行中")
