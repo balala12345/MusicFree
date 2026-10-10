@@ -13,7 +13,7 @@
  *   2) 任何地方 await qsignSign(url, headers) 就能拿到 6 个签名头
  *   3) 插件沙箱里也会自动有 globalThis.__qsign(url, headers)（见 plugin.ts 补丁）
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 
 type Pending = {
@@ -23,6 +23,16 @@ type Pending = {
 };
 
 const pending = new Map<string, Pending>();
+// 懒加载：App 启动时不挂 WebView，只有真正要签名时才挂（避免影响启动流程）
+let mountRequested = false;
+const mountListeners = new Set<() => void>();
+function requestMount() {
+  if (mountRequested) return;
+  mountRequested = true;
+  mountListeners.forEach((fn) => {
+    try { fn(); } catch (e) {}
+  });
+}
 let webviewRef: any = null;
 let seq = 0;
 let readyResolvers: Array<() => void> = [];
@@ -72,6 +82,7 @@ function waitReady(timeoutMs = 20000) {
  * @returns {Promise<{ [k: string]: string }>} 6 个签名头；失败会 reject
  */
 export async function qsignSign(url: string, header: Record<string, string> = {}) {
+  requestMount();          // 第一次调用时才把 WebView 挂上
   await waitReady();
   const id = nextId();
   const payload = JSON.stringify({ cmd: 'sign', id, url, header });
@@ -97,11 +108,17 @@ export async function qsignSign(url: string, header: Record<string, string> = {}
  */
 export function QSignHost() {
   const ref = useRef<any>(null);
+  const [show, setShow] = useState(mountRequested);
   useEffect(() => {
+    const fn = () => setShow(true);
+    mountListeners.add(fn);
+    if (mountRequested) fn();
     return () => {
+      mountListeners.delete(fn);
       webviewRef = null;
     };
   }, []);
+  if (!show) return null;   // 没请求签名就不渲染，零干扰
   return (
     <WebView
       ref={ref}
@@ -121,12 +138,9 @@ export function QSignHost() {
         readyResolvers = [];
         list.forEach((fn) => fn());
       }}
-      onError={() => {
-        webviewRef = null;
-      }}
-      style={{ width: 0, height: 0, opacity: 0, position: 'absolute' }}
-      // iOS 需要下面这行；Android 用 file:///android_asset 即可
-      // allowingReadAccessToURL="file:///"
+      onError={() => { webviewRef = null; }}
+      pointerEvents="none"
+      style={{ width: 1, height: 1, opacity: 0, position: 'absolute', left: -9999, top: -9999 }}
     />
   );
 }
