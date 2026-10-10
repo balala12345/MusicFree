@@ -1,4 +1,4 @@
-package fun.xwj.musicfree.qsign
+package `fun`.xwj.musicfree.qsign
 
 import android.app.*
 import android.content.Intent
