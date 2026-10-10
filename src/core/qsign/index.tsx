@@ -14,6 +14,7 @@
  *   3) 插件沙箱里也会自动有 globalThis.__qsign(url, headers)（见 plugin.ts 补丁）
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 
 type Pending = {
@@ -120,6 +121,7 @@ export function QSignHost() {
   }, []);
   if (!show) return null;   // 没请求签名就不渲染，零干扰
   return (
+    <View pointerEvents="none" style={{ position: 'absolute', width: 0, height: 0, left: 0, top: 0, zIndex: -1 }}>
     <WebView
       ref={ref}
       source={{ uri: 'file:///android_asset/qsign.html' }}
@@ -140,7 +142,9 @@ export function QSignHost() {
       }}
       onError={() => { webviewRef = null; }}
       pointerEvents="none"
-      style={{ width: 1, height: 1, opacity: 0, position: 'absolute', left: -9999, top: -9999 }}
+      // 绝对定位 + 零尺寸 + zIndex -1：完全不参与布局，也不挡触摸
+      style={{ width: 0, height: 0, opacity: 0 }}
     />
+    </View>
   );
 }
