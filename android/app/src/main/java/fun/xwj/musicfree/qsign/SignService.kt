@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
@@ -29,6 +30,7 @@ class SignService : Service() {
     @Volatile private var ready = false
     private val waiters = ConcurrentHashMap<String, (String) -> Unit>()
     private var seq = 0
+    private var tries = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -36,7 +38,7 @@ class SignService : Service() {
         super.onCreate()
         startForeground(1001, buildNotification())
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        createOverlayWebView()
+        ensureOverlay()
         startHttpServer()
     }
 
@@ -54,6 +56,30 @@ class SignService : Service() {
             .setContentText("接口: http://127.0.0.1:8899/api/sign")
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentIntent(pi).setOngoing(true).build()
+    }
+
+    /** 悬浮窗权限（没它 addView 必失败，签名服务就是个哑巴） */
+    private fun hasOverlayPermission(): Boolean =
+        Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this)
+
+    /**
+     * 挂 WebView 前先确认权限；没有就每 3s 重试一次。
+     * 用户去系统设置里授权后，无需重启 App/服务，这里会自己把 WebView 补上。
+     */
+    private fun ensureOverlay() {
+        if (webView != null) return
+        if (!hasOverlayPermission()) {
+            tries++
+            if (tries == 1 || tries % 20 == 0) {
+                Log.w("qsign", "缺少「显示在其他应用上层」权限，签名 WebView 无法挂载（重试 $tries 次）")
+            }
+            Handler(Looper.getMainLooper()).postDelayed({ ensureOverlay() }, 3000)
+            return
+        }
+        createOverlayWebView()
+        if (webView == null) {
+            Handler(Looper.getMainLooper()).postDelayed({ ensureOverlay() }, 3000)
+        }
     }
 
     /** 1x1 悬浮窗里的 WebView：窗口始终"可见"，Chromium 不会冻结它 */
@@ -86,7 +112,8 @@ class SignService : Service() {
             wm?.addView(wv, lp)
             webView = wv
         } catch (e: Exception) {
-            Log.e("qsign", "悬浮窗添加失败（没授权？）: ${e.message}")
+            Log.e("qsign", "悬浮窗添加失败: ${e.message}")
+            try { wv.destroy() } catch (e2: Exception) {}
         }
     }
 
@@ -153,7 +180,18 @@ class SignService : Service() {
             }
             val out: OutputStream = s.getOutputStream()
             if (path.startsWith("/health")) {
-                send(out, 200, "{\"ok\":true,\"service\":\"qsign-local-app\",\"ready\":$ready}")
+                val o = JSONObject()
+                o.put("ok", true)
+                o.put("service", "qsign-local-app")
+                o.put("ready", ready)
+                o.put("webview", webView != null)
+                o.put("overlayPermission", hasOverlayPermission())
+                if (!ready) {
+                    o.put("hint", if (!hasOverlayPermission())
+                        "缺少「显示在其他应用上层」权限：系统设置 → 应用 → MusicFree → 显示在其他应用上层"
+                    else "签名页面还在加载")
+                }
+                send(out, 200, o.toString())
             } else if (path.startsWith("/api/sign")) {
                 var answered = false
                 val lock = Object()
