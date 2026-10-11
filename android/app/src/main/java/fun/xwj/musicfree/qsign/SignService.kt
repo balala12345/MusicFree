@@ -31,6 +31,9 @@ class SignService : Service() {
     private val waiters = ConcurrentHashMap<String, (String) -> Unit>()
     private var seq = 0
     private var tries = 0
+    private var retry: Runnable? = null
+
+    @Volatile private var destroyed = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -42,7 +45,15 @@ class SignService : Service() {
         startHttpServer()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    /** 不自愈：被系统/用户杀掉就彻底结束，不做后台常驻 */
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
+
+    /** 用户从最近任务里划掉 App → 服务一起收掉，不复活 */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.i("qsign", "任务被移除，停止本机签名服务")
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
+    }
 
     private fun buildNotification(): Notification {
         if (Build.VERSION.SDK_INT >= 26) {
@@ -67,23 +78,28 @@ class SignService : Service() {
      * 用户去系统设置里授权后，无需重启 App/服务，这里会自己把 WebView 补上。
      */
     private fun ensureOverlay() {
-        if (webView != null) return
+        if (destroyed || webView != null) return
         if (!hasOverlayPermission()) {
             tries++
             if (tries == 1 || tries % 20 == 0) {
                 Log.w("qsign", "缺少「显示在其他应用上层」权限，签名 WebView 无法挂载（重试 $tries 次）")
             }
-            Handler(Looper.getMainLooper()).postDelayed({ ensureOverlay() }, 3000)
+            scheduleRetry()
             return
         }
         createOverlayWebView()
-        if (webView == null) {
-            Handler(Looper.getMainLooper()).postDelayed({ ensureOverlay() }, 3000)
-        }
+        if (webView == null) scheduleRetry()
+    }
+
+    private fun scheduleRetry() {
+        val r = Runnable { ensureOverlay() }
+        retry = r
+        Handler(Looper.getMainLooper()).postDelayed(r, 3000)
     }
 
     /** 1x1 悬浮窗里的 WebView：窗口始终"可见"，Chromium 不会冻结它 */
     private fun createOverlayWebView() {
+        if (destroyed) return
         val wv = WebView(this)
         wv.settings.javaScriptEnabled = true
         wv.settings.allowFileAccess = true
@@ -233,8 +249,12 @@ class SignService : Service() {
     }
 
     override fun onDestroy() {
+        destroyed = true
+        try { retry?.let { Handler(Looper.getMainLooper()).removeCallbacks(it) } } catch (e: Exception) {}
         try { serverSocket?.close() } catch (e: Exception) {}
-        try { webView?.let { wm?.removeView(it) } } catch (e: Exception) {}
+        try { webView?.let { wv -> wm?.removeView(wv); wv.destroy() } } catch (e: Exception) {}
+        webView = null
+        ready = false
         super.onDestroy()
     }
 }

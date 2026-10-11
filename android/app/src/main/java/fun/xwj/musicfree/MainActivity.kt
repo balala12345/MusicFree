@@ -45,6 +45,21 @@ class MainActivity : ReactActivity() {
   }
 
   /**
+   * 用户退出 App（划掉最近任务/返回键结束）→ 顺手把本机签名服务停掉，
+   * 不留后台进程、不留通知。（音乐播放等原有后台能力不受影响）
+   */
+  override fun onDestroy() {
+    try {
+      if (isFinishing) {
+        stopService(android.content.Intent(this, `fun`.xwj.musicfree.qsign.SignService::class.java))
+      }
+    } catch (e: Exception) {
+      android.util.Log.e("qsign", "停止签名服务失败: ${e.message}")
+    }
+    super.onDestroy()
+  }
+
+  /**
    * Returns the name of the main component registered from JavaScript. This is used to schedule
    * rendering of the component.
    */
